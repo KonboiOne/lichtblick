@@ -26,6 +26,11 @@ type EventTypes = {
   error: (err: Error) => void;
 };
 
+type RenewingUrl = {
+  url(): Promise<string>;
+  refresh(): Promise<string>;
+};
+
 // An event-emitting wrapper for the Streams API:
 // https://developer.mozilla.org/en-US/docs/Web/API/Streams_API
 export default class FetchReader extends EventEmitter<EventTypes> {
@@ -35,13 +40,21 @@ export default class FetchReader extends EventEmitter<EventTypes> {
   #aborted: boolean = false;
   #url: string;
 
-  public constructor(url: string, options?: RequestInit) {
+  public constructor(url: string | RenewingUrl, options?: RequestInit) {
     super();
-    this.#url = url;
+    this.#url = typeof url === "string" ? url : "renewable remote file";
     this.#controller = new AbortController();
-    this.#response = globalRequestQueue.run(
-      async () => await fetch(url, { ...options, signal: this.#controller.signal }),
-    );
+    this.#response = globalRequestQueue.run(async () => {
+      const requestUrl = typeof url === "string" ? url : await url.url();
+      const request = { ...options, signal: this.#controller.signal };
+      const response = await fetch(requestUrl, request);
+
+      if (response.status === 403 && typeof url !== "string") {
+        return await fetch(await url.refresh(), request);
+      }
+
+      return response;
+    });
   }
 
   // you can only call getReader once on a response body

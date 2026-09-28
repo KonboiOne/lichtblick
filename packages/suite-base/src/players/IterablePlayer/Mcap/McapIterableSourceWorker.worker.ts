@@ -22,13 +22,21 @@ export function initialize(
     return Comlink.proxy(wrapped);
   } else if (args.files) {
     const source = new MultiIterableSource(
-      { type: "files", files: args.files, ...pickDefinedHydrationOverrides(args) },
+      {
+        type: "files",
+        files: args.files,
+        ...pickDefinedHydrationOverrides(args),
+      },
       McapIterableSource,
     );
     const wrapped = new WorkerSerializedIterableSourceWorker(source);
     return Comlink.proxy(wrapped);
   } else if (args.url) {
-    const source = new McapIterableSource({ type: "url", url: args.url });
+    const source = new McapIterableSource({
+      type: "url",
+      url: args.url,
+      refreshAccess: args.refreshAccess,
+    });
     const wrapped = new WorkerSerializedIterableSourceWorker(source);
     return Comlink.proxy(wrapped);
   } else if (args.urls) {

@@ -208,6 +208,7 @@ export interface IIterableSource<MessageType = unknown> {
 export type IterableSourceInitializeArgs = {
   file?: File;
   url?: string;
+  refreshAccess?: boolean;
   files?: File[];
   urls?: string[];
   // Optional overrides for multi-file hydration tuning (see MultiSourceHydrationOptions in
@@ -228,7 +229,9 @@ export type IterableSourceInitializeArgs = {
  * Interface for a raw iterable source where messages are in their serialized byte form (Uint8Arrays).
  * A raw source is well suited for workers as array buffers can be efficientely transferred to the main thread.
  */
-export type ISerializedIterableSource = IIterableSource<Uint8Array> & { sourceType: "serialized" };
+export type ISerializedIterableSource = IIterableSource<Uint8Array> & {
+  sourceType: "serialized";
+};
 
 /**
  * Interface for a deserialized iterable source where messages are in their deserialized form (unknown).

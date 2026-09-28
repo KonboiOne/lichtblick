@@ -20,7 +20,7 @@ export class RemoteFileReadable {
   readonly #batchingReadable: BatchingReadable;
 
   public constructor(url: string, options?: RemoteFileReadableOptions) {
-    const fileReader = new BrowserHttpReader(url);
+    const fileReader = new BrowserHttpReader(url, options);
     this.#remoteReader = new CachedFilelike({
       fileReader,
       cacheSizeInBytes: options?.cacheSizeInBytes ?? DEFAULT_CACHE_SIZE_BYTES,

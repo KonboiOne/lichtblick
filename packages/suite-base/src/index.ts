@@ -23,9 +23,15 @@ export type {
 export { AppContext } from "./context/AppContext";
 export type { IAppContext } from "./context/AppContext";
 export { migratePanelsState } from "./services/migrateLayout";
-export type { INativeAppMenu, NativeAppMenuEvent } from "./context/NativeAppMenuContext";
+export type {
+  INativeAppMenu,
+  NativeAppMenuEvent,
+} from "./context/NativeAppMenuContext";
 export { default as NativeWindowContext } from "./context/NativeWindowContext";
-export type { INativeWindow, NativeWindowEvent } from "./context/NativeWindowContext";
+export type {
+  INativeWindow,
+  NativeWindowEvent,
+} from "./context/NativeWindowContext";
 export type { IDataSourceFactory } from "./context/PlayerSelectionContext";
 export { default as installDevtoolsFormatters } from "./util/installDevtoolsFormatters";
 export { default as overwriteFetch } from "./util/overwriteFetch";
@@ -50,6 +56,7 @@ export { default as Ros2LocalBagDataSourceFactory } from "./dataSources/Ros2Loca
 export { default as RosbridgeDataSourceFactory } from "./dataSources/RosbridgeDataSourceFactory";
 export { default as UlogLocalDataSourceFactory } from "./dataSources/UlogLocalDataSourceFactory";
 export { default as RemoteDataSourceFactory } from "./dataSources/RemoteDataSourceFactory";
+export { default as RecordsIngestorDataSourceFactory } from "./dataSources/RecordsIngestorDataSourceFactory";
 export { default as VelodyneDataSourceFactory } from "./dataSources/VelodyneDataSourceFactory";
 export { default as McapLocalDataSourceFactory } from "./dataSources/McapLocalDataSourceFactory";
 export { default as SampleNuscenesDataSourceFactory } from "./dataSources/SampleNuscenesDataSourceFactory";

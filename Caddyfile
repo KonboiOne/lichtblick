@@ -1,0 +1,9 @@
+{
+	admin off
+	persist_config off
+}
+
+:8080 {
+	root * /src
+	file_server
+}

@@ -65,5 +65,34 @@ describe("FetchReader", () => {
       expect(runGlobalRequestQueueMock).toHaveBeenCalledWith(expect.any(Function));
       expect(mockFetch).not.toHaveBeenCalled();
     });
+
+    it("refreshes an expired credential and retries the same range once", async () => {
+      mockFetch
+        .mockResolvedValueOnce(new Response(null, { status: 403 }))
+        .mockResolvedValueOnce(new Response(new ReadableStream(), { status: 206 }));
+
+      const provider = {
+        url: jest.fn().mockResolvedValue("https://store.blob.core.windows.net/file.mcap?sig=old"),
+        refresh: jest
+          .fn()
+          .mockResolvedValue("https://store.blob.core.windows.net/file.mcap?sig=new"),
+      };
+      const options = { headers: { Range: "bytes=10-20" } };
+      const reader = new FetchReader(provider, options);
+      const queuedFn = mockGlobalRequestQueue.run.mock.calls[0]![0];
+
+      expect((await queuedFn()).status).toBe(206);
+      expect(provider.refresh).toHaveBeenCalledTimes(1);
+      expect(mockFetch).toHaveBeenNthCalledWith(1, expect.stringContaining("sig=old"), {
+        ...options,
+        signal: expect.any(AbortSignal),
+      });
+      expect(mockFetch).toHaveBeenNthCalledWith(2, expect.stringContaining("sig=new"), {
+        ...options,
+        signal: expect.any(AbortSignal),
+      });
+
+      reader.destroy();
+    });
   });
 });

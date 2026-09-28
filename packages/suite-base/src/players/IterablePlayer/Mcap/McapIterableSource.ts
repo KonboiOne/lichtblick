@@ -150,6 +150,7 @@ export class McapIterableSource implements ISerializedIterableSource {
       readable = new RemoteFileReadable(source.url, {
         cacheSizeInBytes: source.cacheSizeInBytes,
         readAheadEnabled: source.readAheadEnabled,
+        refreshAccess: source.refreshAccess,
         ...(source.readAheadBufferBytes != undefined
           ? { readAheadBufferBytes: source.readAheadBufferBytes }
           : {}),
@@ -178,6 +179,9 @@ export class McapIterableSource implements ISerializedIterableSource {
     // indexed-init probe connection/cache alive.
     readable.close();
     this.#persistentReadable = undefined;
+    if (source.refreshAccess === true) {
+      throw new Error("Records Ingestor visualization requires an indexed MCAP");
+    }
     return await this.#openUnindexedUrlFallback(source.url);
   }
 

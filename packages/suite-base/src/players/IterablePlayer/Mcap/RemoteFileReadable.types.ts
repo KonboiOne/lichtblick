@@ -9,4 +9,5 @@ export type RemoteFileReadableOptions = {
   cacheSizeInBytes?: number;
   readAheadEnabled?: boolean;
   readAheadBufferBytes?: number;
+  refreshAccess?: boolean;
 };

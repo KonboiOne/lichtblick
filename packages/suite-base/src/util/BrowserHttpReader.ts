@@ -16,14 +16,20 @@
 
 import type { FileReader, FileStream } from "@lichtblick/suite-base/util/CachedFilelike.types";
 import FetchReader from "@lichtblick/suite-base/util/FetchReader";
+import RefreshingSasUrl from "@lichtblick/suite-base/util/RefreshingSasUrl";
 import isDesktopApp from "@lichtblick/suite-base/util/isDesktopApp";
 
 // A file reader that reads from a remote HTTP URL, for usage in the browser (not for node.js).
 export default class BrowserHttpReader implements FileReader {
   #url: string;
+  #access?: RefreshingSasUrl;
+  #etag?: string;
 
-  public constructor(url: string) {
+  public constructor(url: string, options?: { refreshAccess?: boolean }) {
     this.#url = url;
+    if (options?.refreshAccess === true) {
+      this.#access = new RefreshingSasUrl(url);
+    }
   }
 
   public async open(): Promise<{ size: number; identifier?: string }> {
@@ -39,7 +45,11 @@ export default class BrowserHttpReader implements FileReader {
       // it may add a `range` header to the request, which causes some servers to omit the
       // `accept-ranges` header in the response.
       const controller = new AbortController();
-      response = await fetch(this.#url, { signal: controller.signal, cache: "no-store" });
+      const request = { signal: controller.signal, cache: "no-store" as const };
+      response = await fetch(this.#access ? await this.#access.url() : this.#url, request);
+      if (response.status === 403 && this.#access) {
+        response = await fetch(await this.#access.refresh(), request);
+      }
       controller.abort();
     } catch (error) {
       let errMsg = `Fetching remote file failed. ${error}`;
@@ -71,6 +81,7 @@ export default class BrowserHttpReader implements FileReader {
     if (size == undefined) {
       throw new Error(`Remote file is missing file size. <${this.#url}>`);
     }
+    this.#etag = response.headers.get("etag") ?? undefined;
     return {
       size: parseInt(size),
       identifier:
@@ -79,8 +90,13 @@ export default class BrowserHttpReader implements FileReader {
   }
 
   public fetch(offset: number, length: number): FileStream {
-    const headers = new Headers({ range: `bytes=${offset}-${offset + (length - 1)}` });
-    const reader = new FetchReader(this.#url, { headers });
+    const headers = new Headers({
+      range: `bytes=${offset}-${offset + (length - 1)}`,
+    });
+    if (this.#etag) {
+      headers.set("if-match", this.#etag);
+    }
+    const reader = new FetchReader(this.#access ?? this.#url, { headers });
     reader.read();
     return reader;
   }
