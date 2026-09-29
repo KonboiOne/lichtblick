@@ -19,7 +19,10 @@ export default class RefreshingSasUrl {
   #access?: Access;
   #pending?: Promise<string>;
 
-  public constructor(endpoint: string, fetch: typeof globalThis.fetch = globalThis.fetch.bind(globalThis)) {
+  public constructor(
+    endpoint: string,
+    fetch: typeof globalThis.fetch = globalThis.fetch.bind(globalThis),
+  ) {
     this.#endpoint = endpoint;
     this.#fetch = fetch;
   }
@@ -52,7 +55,7 @@ export default class RefreshingSasUrl {
       throw new Error(`Visualization access failed with status ${response.status}`);
     }
 
-    const access = parseAccess(await response.json());
+    const access = parseAccess(await response.json(), this.#endpoint);
     if (!access) {
       throw new Error("Invalid visualization access response");
     }
@@ -62,7 +65,7 @@ export default class RefreshingSasUrl {
   }
 }
 
-function parseAccess(value: unknown): Access | undefined {
+function parseAccess(value: unknown, endpoint: string): Access | undefined {
   if (typeof value !== "object" || value == undefined) {
     return undefined;
   }
@@ -74,11 +77,22 @@ function parseAccess(value: unknown): Access | undefined {
 
   try {
     const url = new URL(candidate.url);
+    const accessEndpoint = new URL(endpoint);
     const expiry = Date.parse(candidate.expiresAt);
+    const isBlobUrl = url.hostname.endsWith(".blob.core.windows.net");
+    const isProxyUrl =
+      url.origin === accessEndpoint.origin &&
+      url.pathname ===
+        accessEndpoint.pathname.replace(/\/visualization-access$/, "/visualization-payload") &&
+      url.searchParams.get("sr") === "b" &&
+      url.searchParams.get("spr") === "https";
 
     if (
       url.protocol !== "https:" ||
-      !url.hostname.endsWith(".blob.core.windows.net") ||
+      url.username !== "" ||
+      url.password !== "" ||
+      url.hash !== "" ||
+      (!isBlobUrl && !isProxyUrl) ||
       url.searchParams.get("sp") !== "r" ||
       !url.searchParams.has("sig") ||
       !Number.isFinite(expiry) ||

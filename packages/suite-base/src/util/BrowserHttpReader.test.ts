@@ -45,7 +45,7 @@ describe("BrowserHttpReader with renewable access", () => {
     fetchMock.mockRestore();
   });
 
-  it("opens the Blob and pins subsequent ranges to its ETag", async () => {
+  it("opens the Blob with HEAD and pins subsequent ranges to its ETag", async () => {
     const reader = new BrowserHttpReader(endpoint, { refreshAccess: true });
     expect(await reader.open()).toEqual({
       size: 100,
@@ -62,6 +62,7 @@ describe("BrowserHttpReader with renewable access", () => {
       cache: "no-store",
     });
     expect(fetchMock.mock.calls[1]![0]).toBe(blobUrl);
+    expect(fetchMock.mock.calls[1]![1].method).toBe("HEAD");
     expect(fetchMock.mock.calls[2]![0]).toBe(blobUrl);
     expect(fetchMock.mock.calls[2]![1].headers.get("range")).toBe("bytes=10-11");
     expect(fetchMock.mock.calls[2]![1].headers.get("if-match")).toBe('"version-1"');

@@ -35,17 +35,16 @@ export default class BrowserHttpReader implements FileReader {
   public async open(): Promise<{ size: number; identifier?: string }> {
     let response: Response;
     try {
-      // Make a GET request and then immediately cancel it. This is more robust than a HEAD request,
-      // since the server might not accept HEAD requests (e.g. when using S3 presigned URLs that
-      // only work for one particular method like GET).
-      // Note that we cannot use `range: "bytes=0-1"` or so, because then we can't get the actual
-      // file size without making Content-Range a CORS header, therefore making all this a bit less
-      // robust.
-      // "no-store" forces an unconditional remote request. When the browser's cache is populated,
-      // it may add a `range` header to the request, which causes some servers to omit the
-      // `accept-ranges` header in the response.
+      // Use HEAD for Records Ingestor so opening a bag transfers no payload. Other remote
+      // sources may not support HEAD, so keep their GET-and-abort behavior.
+      // "no-store" forces an unconditional request and preserves the file size headers.
       const controller = new AbortController();
-      const request = { signal: controller.signal, cache: "no-store" as const };
+      // Records Ingestor serves the same metadata with HEAD, without opening a full bag stream.
+      const request = {
+        signal: controller.signal,
+        cache: "no-store" as const,
+        method: this.#access ? "HEAD" : "GET",
+      };
       response = await fetch(this.#access ? await this.#access.url() : this.#url, request);
       if (response.status === 403 && this.#access) {
         response = await fetch(await this.#access.refresh(), request);
