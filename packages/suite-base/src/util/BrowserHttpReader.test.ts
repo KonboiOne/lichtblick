@@ -68,3 +68,49 @@ describe("BrowserHttpReader with renewable access", () => {
     expect(fetchMock.mock.calls[2]![1].headers.get("if-match")).toBe('"version-1"');
   });
 });
+
+it("splits a large Records Ingestor read into parallel ordered ranges", async () => {
+  const endpoint = "https://records.example.test/api/v1/records/sha256-a/visualization-access";
+  const payload =
+    "https://records.example.test/api/v1/records/sha256-a/visualization-payload?sp=r&sr=b&spr=https&sig=secret";
+  const size = 24 * 1024 * 1024;
+  const fetchMock = jest.spyOn(global, "fetch").mockImplementation(async (url, options) => {
+    if (url === endpoint) {
+      return new Response(
+        JSON.stringify({ url: payload, expiresAt: new Date(Date.now() + 300_000).toISOString() }),
+      );
+    }
+    if (options?.method === "HEAD") {
+      return new Response(null, {
+        headers: { "accept-ranges": "bytes", "content-length": String(size) },
+      });
+    }
+    const range = new Headers(options?.headers).get("range")!;
+    const [first, last] = range.slice(6).split("-").map(Number) as [number, number];
+    return new Response(new Uint8Array(last - first + 1), {
+      status: 206,
+      headers: { "content-range": `bytes ${first}-${last}/${size}` },
+    });
+  });
+
+  try {
+    const reader = new BrowserHttpReader(endpoint, { refreshAccess: true });
+    await reader.open();
+    const stream = reader.fetch(0, size);
+    const lengths: number[] = [];
+    await new Promise<void>((resolve, reject) => {
+      stream.on("data", (chunk: Uint8Array) => lengths.push(chunk.byteLength));
+      stream.on("end", resolve);
+      stream.on("error", reject);
+    });
+
+    expect(lengths).toEqual([8 * 1024 * 1024, 8 * 1024 * 1024, 8 * 1024 * 1024]);
+    expect(
+      fetchMock.mock.calls
+        .slice(2)
+        .map(([, options]) => new Headers(options?.headers).get("range")),
+    ).toEqual(["bytes=0-8388607", "bytes=8388608-16777215", "bytes=16777216-25165823"]);
+  } finally {
+    fetchMock.mockRestore();
+  }
+});

@@ -16,6 +16,9 @@
 
 import type { FileReader, FileStream } from "@lichtblick/suite-base/util/CachedFilelike.types";
 import FetchReader from "@lichtblick/suite-base/util/FetchReader";
+import ParallelHttpReader, {
+  PARALLEL_RANGE_BYTES,
+} from "@lichtblick/suite-base/util/ParallelHttpReader";
 import RefreshingSasUrl from "@lichtblick/suite-base/util/RefreshingSasUrl";
 import isDesktopApp from "@lichtblick/suite-base/util/isDesktopApp";
 
@@ -24,6 +27,7 @@ export default class BrowserHttpReader implements FileReader {
   #url: string;
   #access?: RefreshingSasUrl;
   #etag?: string;
+  #size?: number;
 
   public constructor(url: string, options?: { refreshAccess?: boolean }) {
     this.#url = url;
@@ -81,14 +85,27 @@ export default class BrowserHttpReader implements FileReader {
       throw new Error(`Remote file is missing file size. <${this.#url}>`);
     }
     this.#etag = response.headers.get("etag") ?? undefined;
+    this.#size = Number(size);
+    if (!Number.isSafeInteger(this.#size) || this.#size < 0) {
+      throw new Error("Remote file has an invalid file size");
+    }
     return {
-      size: parseInt(size),
+      size: this.#size,
       identifier:
         response.headers.get("etag") ?? response.headers.get("last-modified") ?? undefined,
     };
   }
 
   public fetch(offset: number, length: number): FileStream {
+    if (this.#access && this.#size != undefined && length > PARALLEL_RANGE_BYTES) {
+      const reader = new ParallelHttpReader(this.#access, offset, length, {
+        size: this.#size,
+        etag: this.#etag,
+      });
+      reader.read();
+      return reader;
+    }
+
     const headers = new Headers({
       range: `bytes=${offset}-${offset + (length - 1)}`,
     });
