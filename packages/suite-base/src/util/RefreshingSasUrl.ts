@@ -19,7 +19,7 @@ export default class RefreshingSasUrl {
   #access?: Access;
   #pending?: Promise<string>;
 
-  public constructor(endpoint: string, fetch: typeof globalThis.fetch = globalThis.fetch) {
+  public constructor(endpoint: string, fetch: typeof globalThis.fetch = globalThis.fetch.bind(globalThis)) {
     this.#endpoint = endpoint;
     this.#fetch = fetch;
   }
