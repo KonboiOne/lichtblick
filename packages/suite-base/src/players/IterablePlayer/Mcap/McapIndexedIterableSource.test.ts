@@ -13,6 +13,66 @@ import { BlobReadable } from "@lichtblick/suite-base/players/IterablePlayer/Mcap
 import { McapIndexedIterableSource } from "@lichtblick/suite-base/players/IterablePlayer/Mcap/McapIndexedIterableSource";
 
 describe("McapIndexedIterableSource", () => {
+  it("preserves indexed messages and stops prefetch when an iterator is cancelled", async () => {
+    const tempBuffer = new TempBuffer();
+    const writer = new McapWriter({ writable: tempBuffer, chunkSize: 1 });
+    await writer.start({ library: "", profile: "ros1" });
+    const schemaId = await writer.registerSchema({
+      name: "std_msgs/String",
+      encoding: "ros1msg",
+      data: new TextEncoder().encode("string data"),
+    });
+    const camera = await writer.registerChannel({
+      topic: "camera",
+      schemaId,
+      messageEncoding: "ros1",
+      metadata: new Map(),
+    });
+    const other = await writer.registerChannel({
+      topic: "other",
+      schemaId,
+      messageEncoding: "ros1",
+      metadata: new Map(),
+    });
+    for (let sequence = 0; sequence < 4; sequence++) {
+      await writer.addMessage({
+        channelId: sequence % 2 === 0 ? camera : other,
+        logTime: BigInt(sequence) * 1_000_000_000n,
+        publishTime: BigInt(sequence) * 1_000_000_000n,
+        sequence,
+        data: new Uint8Array([sequence]),
+      });
+    }
+    await writer.end();
+
+    const readable = new BlobReadable(new Blob([tempBuffer.get()]) as unknown as globalThis.Blob);
+    const reader = await McapIndexedReader.Initialize({ readable });
+    const stop = jest.fn();
+    const prefetch = jest.fn(() => stop);
+    const source = new McapIndexedIterableSource(reader, prefetch);
+    await source.initialize();
+    const topics = new Map([["camera", { topic: "camera" }]]);
+    const iterator = source.messageIterator({ topics });
+    expect((await iterator.next()).value).toMatchObject({
+      type: "message-event",
+      msgEvent: { topic: "camera", message: new Uint8Array([0]) },
+    });
+    expect(stop).not.toHaveBeenCalled();
+    await iterator.return?.(undefined);
+    expect(stop).toHaveBeenCalledTimes(1);
+
+    const messages = [];
+    for await (const message of source.messageIterator({ topics })) {
+      messages.push(message);
+    }
+    expect(messages).toMatchObject([
+      { type: "message-event", msgEvent: { message: new Uint8Array([0]) } },
+      { type: "message-event", msgEvent: { message: new Uint8Array([2]) } },
+    ]);
+    expect(prefetch).toHaveBeenCalledWith([expect.anything(), expect.anything()]);
+    expect(stop).toHaveBeenCalledTimes(2);
+  });
+
   it("returns the correct metadata", async () => {
     const tempBuffer = new TempBuffer();
 
@@ -233,4 +293,41 @@ describe("McapIndexedIterableSource", () => {
       expect(source.getEnd()).toEqual({ sec: 10, nsec: 0 });
     });
   });
+});
+
+it("prefetches only selected-topic chunks in the requested time window and releases the session", async () => {
+  const stop = jest.fn();
+  const prefetch = jest.fn(() => stop);
+  const chunk = (offset: bigint, time: bigint, channel: number) => ({
+    chunkStartOffset: offset,
+    chunkLength: 8n,
+    messageIndexLength: 2n,
+    messageStartTime: time,
+    messageEndTime: time + 100n,
+    messageIndexOffsets: new Map([[channel, offset + 10n]]),
+  });
+  const reader = {
+    channelsById: new Map([
+      [1, { topic: "camera" }],
+      [2, { topic: "unused" }],
+    ]),
+    chunkIndexes: [
+      chunk(20n, 2_000_000_000n, 1),
+      chunk(0n, 0n, 1),
+      chunk(10n, 1_000_000_000n, 2),
+      chunk(30n, 3_000_000_000n, 1),
+    ],
+    readMessages: jest.fn(async function* () {
+      yield* [];
+    }),
+  } as unknown as McapIndexedReader;
+  const source = new McapIndexedIterableSource(reader, prefetch);
+  const iterator = source.messageIterator({
+    topics: new Map([["camera", { topic: "camera" }]]),
+    start: { sec: 1, nsec: 0 },
+    end: { sec: 2, nsec: 100 },
+  });
+  await iterator.next();
+  expect(prefetch).toHaveBeenCalledWith([{ start: 20, end: 32 }]);
+  expect(stop).toHaveBeenCalledTimes(1);
 });

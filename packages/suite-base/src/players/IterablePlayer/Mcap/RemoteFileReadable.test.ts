@@ -8,6 +8,18 @@ const mockOpen = jest.fn().mockResolvedValue(undefined);
 const mockSize = jest.fn().mockReturnValue(1024);
 const mockRead = jest.fn().mockResolvedValue(new Uint8Array([1, 2, 3]));
 const mockClose = jest.fn();
+const mockStopPrefetch = jest.fn();
+const mockPrefetch = jest.fn(() => mockStopPrefetch);
+
+jest.mock("@lichtblick/suite-base/util/PrefetchingFilelike", () => {
+  return class {
+    public open = mockOpen;
+    public size = mockSize;
+    public read = mockRead;
+    public close = mockClose;
+    public prefetch = mockPrefetch;
+  };
+});
 
 jest.mock("@lichtblick/suite-base/util/CachedFilelike", () => {
   return jest.fn().mockImplementation(() => ({
@@ -33,6 +45,24 @@ describe("RemoteFileReadable", () => {
   });
 
   describe("constructor", () => {
+    it("uses indexed prefetch for renewable Records Ingestor access", async () => {
+      const reader = new RemoteFileReadable(testUrl, { refreshAccess: true });
+      await reader.open();
+      const ranges = [{ start: 20, end: 30 }];
+      const stop = reader.prefetch(ranges);
+      expect(mockPrefetch).toHaveBeenCalledWith(ranges);
+      expect(CachedFilelike).not.toHaveBeenCalled();
+      stop();
+      expect(mockStopPrefetch).toHaveBeenCalledTimes(1);
+      reader.close();
+      expect(mockClose).toHaveBeenCalledTimes(1);
+    });
+
+    it("does not start indexed prefetch for ordinary remote URLs", () => {
+      const reader = new RemoteFileReadable(testUrl);
+      reader.prefetch([{ start: 20, end: 30 }])();
+      expect(mockPrefetch).not.toHaveBeenCalled();
+    });
     it("should use default 500MiB cache size when none provided", () => {
       // Given a URL without custom cache size
       // When creating a RemoteFileReadable

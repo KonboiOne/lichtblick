@@ -16,9 +16,7 @@
 
 import type { FileReader, FileStream } from "@lichtblick/suite-base/util/CachedFilelike.types";
 import FetchReader from "@lichtblick/suite-base/util/FetchReader";
-import ParallelHttpReader, {
-  PARALLEL_RANGE_BYTES,
-} from "@lichtblick/suite-base/util/ParallelHttpReader";
+import ParallelHttpReader from "@lichtblick/suite-base/util/ParallelHttpReader";
 import RefreshingSasUrl from "@lichtblick/suite-base/util/RefreshingSasUrl";
 import isDesktopApp from "@lichtblick/suite-base/util/isDesktopApp";
 
@@ -97,7 +95,7 @@ export default class BrowserHttpReader implements FileReader {
   }
 
   public fetch(offset: number, length: number): FileStream {
-    if (this.#access && this.#size != undefined && length > PARALLEL_RANGE_BYTES) {
+    if (this.#access && this.#size != undefined) {
       const reader = new ParallelHttpReader(this.#access, offset, length, {
         size: this.#size,
         etag: this.#etag,

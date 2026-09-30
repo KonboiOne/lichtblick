@@ -168,7 +168,10 @@ export class McapIterableSource implements ISerializedIterableSource {
     }
     if (result.status === "indexed") {
       return {
-        inner: new McapIndexedIterableSource(result.reader),
+        inner: new McapIndexedIterableSource(
+          result.reader,
+          source.refreshAccess === true ? (ranges) => readable.prefetch(ranges) : undefined,
+        ),
         readable,
         indexed: true,
         weightBytes: estimateReaderWeightBytes(result.reader),

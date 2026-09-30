@@ -21,11 +21,13 @@ import {
 } from "@lichtblick/suite-base/players/IterablePlayer/IIterableSource";
 import { PlayerAlert, TopicStats } from "@lichtblick/suite-base/players/types";
 import { RosDatatypes } from "@lichtblick/suite-base/types/RosDatatypes";
+import type { Range } from "@lichtblick/suite-base/util/ranges";
 
 const log = Logger.getLogger(__filename);
 
 export class McapIndexedIterableSource implements ISerializedIterableSource {
   #reader: McapIndexedReader;
+  readonly #prefetch?: (ranges: readonly Range[]) => () => void;
   #channelInfoById = new Map<
     number,
     {
@@ -39,8 +41,12 @@ export class McapIndexedIterableSource implements ISerializedIterableSource {
 
   public readonly sourceType = "serialized";
 
-  public constructor(reader: McapIndexedReader) {
+  public constructor(
+    reader: McapIndexedReader,
+    prefetch?: (ranges: readonly Range[]) => () => void,
+  ) {
     this.#reader = reader;
+    this.#prefetch = prefetch;
   }
 
   public async initialize(): Promise<Initialization> {
@@ -163,47 +169,95 @@ export class McapIndexedIterableSource implements ISerializedIterableSource {
 
     const topicNames = Array.from(topics.keys());
 
-    for await (const message of this.#reader.readMessages({
-      startTime: toNanoSec(start),
-      endTime: toNanoSec(end),
-      topics: topicNames,
-      validateCrcs: false,
-    })) {
-      const channelInfo = this.#channelInfoById.get(message.channelId);
-      if (!channelInfo) {
-        yield {
-          type: "alert",
-          connectionId: message.channelId,
-          alert: {
-            message: `Received message on channel ${message.channelId} without prior channel info`,
-            severity: "error",
-          },
-        };
-        continue;
+    const startTime = toNanoSec(start);
+    const endTime = toNanoSec(end);
+    const stopPrefetch = this.#prefetch?.(
+      this.#reader.chunkIndexes
+        .filter(
+          (chunk) =>
+            chunk.messageStartTime <= endTime &&
+            chunk.messageEndTime >= startTime &&
+            Array.from(chunk.messageIndexOffsets.keys()).some((id) => {
+              const channel = this.#reader.channelsById.get(id);
+              return channel != undefined && topics.has(channel.topic);
+            }),
+        )
+        .slice()
+        .sort((a, b) =>
+          a.messageStartTime === b.messageStartTime
+            ? Number(a.chunkStartOffset - b.chunkStartOffset)
+            : Number(a.messageStartTime - b.messageStartTime),
+        )
+        .map((chunk) => {
+          let indexStart: bigint | undefined;
+          for (const offset of chunk.messageIndexOffsets.values()) {
+            if (offset < 0n) {
+              throw new Error("Invalid MCAP message index offset");
+            }
+            if (indexStart == undefined || offset < indexStart) {
+              indexStart = offset;
+            }
+          }
+          const chunkEnd = chunk.chunkStartOffset + chunk.chunkLength;
+          const indexEnd = (indexStart ?? chunkEnd) + chunk.messageIndexLength;
+          const rangeEnd = chunkEnd > indexEnd ? chunkEnd : indexEnd;
+          if (
+            chunk.chunkStartOffset < 0n ||
+            chunk.chunkLength <= 0n ||
+            chunk.messageIndexLength < 0n ||
+            rangeEnd > BigInt(Number.MAX_SAFE_INTEGER)
+          ) {
+            throw new Error("MCAP chunk range exceeds safe integer limit");
+          }
+          return { start: Number(chunk.chunkStartOffset), end: Number(rangeEnd) };
+        }),
+    );
+
+    try {
+      for await (const message of this.#reader.readMessages({
+        startTime,
+        endTime,
+        topics: topicNames,
+        validateCrcs: false,
+      })) {
+        const channelInfo = this.#channelInfoById.get(message.channelId);
+        if (!channelInfo) {
+          yield {
+            type: "alert",
+            connectionId: message.channelId,
+            alert: {
+              message: `Received message on channel ${message.channelId} without prior channel info`,
+              severity: "error",
+            },
+          };
+          continue;
+        }
+        try {
+          yield {
+            type: "message-event",
+            msgEvent: {
+              topic: channelInfo.channel.topic,
+              receiveTime: fromNanoSec(message.logTime),
+              publishTime: fromNanoSec(message.publishTime),
+              message: message.data,
+              sizeInBytes: message.data.byteLength,
+              schemaName: channelInfo.schemaName ?? "",
+            },
+          };
+        } catch (error) {
+          yield {
+            type: "alert",
+            connectionId: message.channelId,
+            alert: {
+              message: `Error decoding message on ${channelInfo.channel.topic}`,
+              error,
+              severity: "error",
+            },
+          };
+        }
       }
-      try {
-        yield {
-          type: "message-event",
-          msgEvent: {
-            topic: channelInfo.channel.topic,
-            receiveTime: fromNanoSec(message.logTime),
-            publishTime: fromNanoSec(message.publishTime),
-            message: message.data,
-            sizeInBytes: message.data.byteLength,
-            schemaName: channelInfo.schemaName ?? "",
-          },
-        };
-      } catch (error) {
-        yield {
-          type: "alert",
-          connectionId: message.channelId,
-          alert: {
-            message: `Error decoding message on ${channelInfo.channel.topic}`,
-            error,
-            severity: "error",
-          },
-        };
-      }
+    } finally {
+      stopPrefetch?.();
     }
   }
 

@@ -38,7 +38,12 @@ describe("BrowserHttpReader with renewable access", () => {
           },
         }),
       )
-      .mockResolvedValueOnce(new Response(new Uint8Array([1, 2]), { status: 206 }));
+      .mockResolvedValueOnce(
+        new Response(new Uint8Array([1, 2]), {
+          status: 206,
+          headers: { "content-range": "bytes 10-11/100" },
+        }),
+      );
   });
 
   afterEach(() => {
@@ -110,6 +115,36 @@ it("splits a large Records Ingestor read into parallel ordered ranges", async ()
         .slice(2)
         .map(([, options]) => new Headers(options?.headers).get("range")),
     ).toEqual(["bytes=0-8388607", "bytes=8388608-16777215", "bytes=16777216-25165823"]);
+  } finally {
+    fetchMock.mockRestore();
+  }
+});
+
+it("rejects a mismatched Content-Range on a small Records Ingestor read", async () => {
+  const endpoint = "https://records.example.test/api/v1/records/sha256-a/visualization-access";
+  const payload = "https://store.blob.core.windows.net/records/payload.mcap?sp=r&sig=secret";
+  const fetchMock = jest.spyOn(global, "fetch").mockImplementation(async (url, options) => {
+    if (url === endpoint)
+      {return new Response(
+        JSON.stringify({ url: payload, expiresAt: new Date(Date.now() + 300_000).toISOString() }),
+      );}
+    if (options?.method === "HEAD")
+      {return new Response(null, { headers: { "accept-ranges": "bytes", "content-length": "100" } });}
+    return new Response(new Uint8Array([1, 2]), {
+      status: 206,
+      headers: { "content-range": "bytes 0-1/100" },
+    });
+  });
+  try {
+    const reader = new BrowserHttpReader(endpoint, { refreshAccess: true });
+    await reader.open();
+    const stream = reader.fetch(10, 2);
+    await expect(
+      new Promise<void>((resolve, reject) => {
+        stream.on("end", resolve);
+        stream.on("error", reject);
+      }),
+    ).rejects.toThrow("Invalid parallel range response");
   } finally {
     fetchMock.mockRestore();
   }

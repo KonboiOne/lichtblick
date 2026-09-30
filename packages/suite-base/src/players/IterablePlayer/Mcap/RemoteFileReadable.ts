@@ -9,6 +9,8 @@ import { McapTypes } from "@mcap/core";
 
 import BrowserHttpReader from "@lichtblick/suite-base/util/BrowserHttpReader";
 import CachedFilelike from "@lichtblick/suite-base/util/CachedFilelike";
+import PrefetchingFilelike from "@lichtblick/suite-base/util/PrefetchingFilelike";
+import type { Range } from "@lichtblick/suite-base/util/ranges";
 
 import { BatchingReadable } from "./BatchingReadable";
 import type { RemoteFileReadableOptions } from "./RemoteFileReadable.types";
@@ -16,17 +18,20 @@ import type { RemoteFileReadableOptions } from "./RemoteFileReadable.types";
 const DEFAULT_CACHE_SIZE_BYTES = 1024 * 1024 * 500; // 500MiB
 
 export class RemoteFileReadable {
-  readonly #remoteReader: CachedFilelike;
+  readonly #remoteReader: CachedFilelike | PrefetchingFilelike;
   readonly #batchingReadable: BatchingReadable;
 
   public constructor(url: string, options?: RemoteFileReadableOptions) {
     const fileReader = new BrowserHttpReader(url, options);
-    this.#remoteReader = new CachedFilelike({
-      fileReader,
-      cacheSizeInBytes: options?.cacheSizeInBytes ?? DEFAULT_CACHE_SIZE_BYTES,
-      readAheadEnabled: options?.readAheadEnabled,
-      readAheadBufferBytes: options?.readAheadBufferBytes,
-    });
+    this.#remoteReader =
+      options?.refreshAccess === true
+        ? new PrefetchingFilelike({ fileReader })
+        : new CachedFilelike({
+            fileReader,
+            cacheSizeInBytes: options?.cacheSizeInBytes ?? DEFAULT_CACHE_SIZE_BYTES,
+            readAheadEnabled: options?.readAheadEnabled,
+            readAheadBufferBytes: options?.readAheadBufferBytes,
+          });
 
     const inner: McapTypes.IReadable = {
       size: async () => BigInt(this.#remoteReader.size()),
@@ -42,6 +47,12 @@ export class RemoteFileReadable {
 
   public async open(): Promise<void> {
     await this.#remoteReader.open(); // Important that we call this first, because it might throw an error if the file can't be read.
+  }
+
+  public prefetch(ranges: readonly Range[]): () => void {
+    return this.#remoteReader instanceof PrefetchingFilelike
+      ? this.#remoteReader.prefetch(ranges)
+      : () => {};
   }
 
   public async size(): Promise<bigint> {
