@@ -287,11 +287,16 @@ export class IterablePlayer implements Player {
   }
 
   #startPlayImpl(opt?: { untilTime: Time }): void {
-    if (this.#isPlaying || this.#untilTime != undefined || !this.#start || !this.#end) {
+    if (this.#isPlaying || this.#untilTime != undefined) {
       return;
     }
 
+    // Play can wait for source metadata; playUntil needs bounds to validate its target.
     if (opt?.untilTime) {
+      if (!this.#start || !this.#end) {
+        return;
+      }
+
       if (this.#currentTime && compare(opt.untilTime, this.#currentTime) <= 0) {
         throw new Error("Invariant: playUntil time must be after the current time");
       }
