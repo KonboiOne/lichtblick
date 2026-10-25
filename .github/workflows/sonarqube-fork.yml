@@ -20,7 +20,8 @@ jobs:
   external-fork-scan:
     name: SonarCloud Analysis
     runs-on: ubuntu-latest
-    if: ${{ github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'pull_request' }}
+    # SonarCloud is configured for the upstream project.
+    if: ${{ github.repository == 'lichtblick-suite/lichtblick' && (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'pull_request' ) }}
     permissions:
       actions: read
       checks: write
@@ -28,7 +29,7 @@ jobs:
       pull-requests: read
     steps:
       - name: Download PR metadata artifact
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           github-token: ${{ github.token }}
           run-id: ${{ github.event.workflow_run.id }}
@@ -44,7 +45,7 @@ jobs:
           echo "base_ref=$(jq -r '.base_ref' ./.sonar-pr/pr-metadata.json)" >> "$GITHUB_OUTPUT"
 
       - name: Checkout default branch (for workflow scripts only)
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: develop
           sparse-checkout: .github/workflows/scripts
@@ -55,7 +56,7 @@ jobs:
 
       - name: Create in-progress PR check run
         id: check
-        uses: actions/github-script@v9
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
         env:
           HEAD_SHA: ${{ steps.metadata.outputs.head_sha }}
         with:
@@ -64,7 +65,7 @@ jobs:
             const script = require('/tmp/workflow-scripts/create-check-run.js');
             return await script({ github, context });
 
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
           ref: refs/pull/${{ steps.metadata.outputs.number }}/head
@@ -74,7 +75,7 @@ jobs:
           allow-unsafe-pr-checkout: true
 
       - name: Download ESLint report artifact
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           github-token: ${{ github.token }}
           run-id: ${{ github.event.workflow_run.id }}
@@ -82,7 +83,7 @@ jobs:
           path: .
 
       - name: Download coverage artifact
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           github-token: ${{ github.token }}
           run-id: ${{ github.event.workflow_run.id }}
@@ -93,7 +94,7 @@ jobs:
         run: git fetch origin ${{ steps.metadata.outputs.base_ref }}:${{ steps.metadata.outputs.base_ref }}
 
       - name: ScanCloud PR Scan
-        uses: sonarsource/sonarqube-scan-action@v8.3.0
+        uses: sonarsource/sonarqube-scan-action@d209202bc7d53ff1cc128f7f907dac145c9d6ae9 # v8.3.0
         with:
           args: >
             -Dsonar.pullrequest.key=${{ steps.metadata.outputs.number }}
@@ -105,7 +106,7 @@ jobs:
 
       - name: Complete PR check run
         if: always()
-        uses: actions/github-script@v9
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
         env:
           JOB_STATUS: ${{ job.status }}
           CHECK_RUN_ID: ${{ steps.check.outputs.result }}

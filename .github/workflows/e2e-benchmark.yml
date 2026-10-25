@@ -24,15 +24,15 @@ jobs:
       TZ: Europe/Lisbon
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 24
       - run: corepack enable yarn
 
       - name: Restore cache
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: |
             .yarn/cache
@@ -51,7 +51,7 @@ jobs:
         run: yarn benchmark:desktop:build:prod
 
       - name: Run Benchmark E2E tests
-        uses: coactions/setup-xvfb@v1
+        uses: coactions/setup-xvfb@b6b4fcfb9f5a895edadc3bc76318fae0ac17c8b3 # v1
         with:
           working-directory: ./
           # Call playwright directly with an explicit reporter list instead of relying on
