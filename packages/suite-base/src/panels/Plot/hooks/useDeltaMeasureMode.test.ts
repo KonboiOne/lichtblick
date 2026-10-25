@@ -8,6 +8,7 @@ import { toSec } from "@lichtblick/rostime";
 import type { OffscreenCanvasRenderer } from "@lichtblick/suite-base/panels/Plot/OffscreenCanvasRenderer";
 import { PlotCoordinator } from "@lichtblick/suite-base/panels/Plot/PlotCoordinator";
 import { UseDeltaMeasureModeProps } from "@lichtblick/suite-base/panels/Plot/hooks/types";
+import { HoverElement } from "@lichtblick/suite-base/panels/Plot/types";
 import PlotBuilder from "@lichtblick/suite-base/testing/builders/PlotBuilder";
 import RosTimeBuilder from "@lichtblick/suite-base/testing/builders/RosTimeBuilder";
 import { BasicBuilder } from "@lichtblick/test-builders";
@@ -67,6 +68,135 @@ describe("useDeltaMeasureMode", () => {
   const mockCoordinator = {
     getXValueAtPixel: getXValueAtPixelMock,
   } as unknown as PlotCoordinator;
+
+  it.each([
+    "deactivation",
+    "reset",
+    "unmount",
+  ])("should discard a renderer lookup completed after %s", async (change) => {
+    let resolve!: (elements: HoverElement[]) => void;
+    const lookup = new Promise<HoverElement[]>((done) => {
+      resolve = done;
+    });
+    const { result, rerender, props, unmount } = setup({
+      coordinator: mockCoordinator,
+      resetKey: "before",
+      renderer: { getElementsAtPixel: jest.fn().mockReturnValue(lookup) },
+    });
+    act(() => {
+      result.current.toggleActive();
+    });
+    act(() => {
+      result.current.handleCanvasClick(buildClickEvent());
+    });
+
+    if (change === "reset") {
+      rerender({ ...props, resetKey: "after" });
+    } else if (change === "unmount") {
+      unmount();
+    } else {
+      act(() => {
+        result.current.toggleActive();
+      });
+    }
+
+    await act(async () => {
+      resolve([PlotBuilder.hoverElement({ data: PlotBuilder.datum({ value: 1 }) })]);
+      await lookup;
+    });
+
+    expect(result.current.markerA).toBeUndefined();
+    expect(result.current.markerB).toBeUndefined();
+  });
+
+  it("should preserve click order when renderer lookups complete in reverse order", async () => {
+    const resolvers: ((elements: HoverElement[]) => void)[] = [];
+    const lookups: Promise<HoverElement[]>[] = [];
+    const { result } = setup({
+      coordinator: mockCoordinator,
+      renderer: {
+        getElementsAtPixel: jest.fn(async () => {
+          const lookup = new Promise<HoverElement[]>((resolve) => {
+            resolvers.push(resolve);
+          });
+          lookups.push(lookup);
+          return await lookup;
+        }),
+      },
+    });
+    act(() => {
+      result.current.toggleActive();
+    });
+    act(() => {
+      result.current.handleCanvasClick(buildClickEvent());
+      result.current.handleCanvasClick(buildClickEvent());
+    });
+
+    for (const index of [1, 0]) {
+      await act(async () => {
+        resolvers[index]!([
+          PlotBuilder.hoverElement({ data: PlotBuilder.datum({ x: index, value: index }) }),
+        ]);
+        await lookups[index];
+      });
+    }
+
+    expect(result.current.markerA?.xValue).toBe(0);
+    expect(result.current.markerB?.xValue).toBe(1);
+  });
+
+  it("should release a reservation when the renderer finds no point", async () => {
+    const { result } = setup({
+      coordinator: mockCoordinator,
+      renderer: {
+        getElementsAtPixel: jest
+          .fn()
+          .mockResolvedValueOnce([])
+          .mockResolvedValue([PlotBuilder.hoverElement({ data: PlotBuilder.datum({ value: 1 }) })]),
+      },
+    });
+    act(() => {
+      result.current.toggleActive();
+    });
+
+    await act(async () => {
+      result.current.handleCanvasClick(buildClickEvent());
+    });
+    await act(async () => {
+      result.current.handleCanvasClick(buildClickEvent());
+    });
+
+    expect(result.current.markerA).toBeDefined();
+    expect(result.current.markerB).toBeUndefined();
+  });
+
+  it("should retain both markers when a new lookup finds no point", async () => {
+    const lookup = jest
+      .fn()
+      .mockResolvedValue([PlotBuilder.hoverElement({ data: PlotBuilder.datum({ value: 1 }) })]);
+    const { result } = setup({
+      coordinator: mockCoordinator,
+      renderer: { getElementsAtPixel: lookup },
+    });
+    act(() => {
+      result.current.toggleActive();
+    });
+    await act(async () => {
+      result.current.handleCanvasClick(buildClickEvent());
+    });
+    await act(async () => {
+      result.current.handleCanvasClick(buildClickEvent());
+    });
+    const previous = { a: result.current.markerA, b: result.current.markerB };
+
+    lookup.mockResolvedValueOnce([]);
+    await act(async () => {
+      result.current.handleCanvasClick(buildClickEvent());
+    });
+
+    expect(result.current.markerA).toEqual(previous.a);
+    expect(result.current.markerB).toEqual(previous.b);
+  });
 
   it("should start inactive with no markers", () => {
     // Given / When

@@ -70,6 +70,7 @@ for (const scenario of SCENARIOS_UNDER_TEST) {
 
     // Then
     expect(memorySamples.length).toBeGreaterThan(0);
+    expect(frameTimeSamples.length).toBeGreaterThan(0);
 
     const artifact: BenchmarkArtifact = {
       scenarioId: scenario.scenarioId,

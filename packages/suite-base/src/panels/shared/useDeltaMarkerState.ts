@@ -17,6 +17,7 @@ export type UseDeltaMarkerStateResult = {
   removeMarkerA: () => void;
   removeMarkerB: () => void;
   nextMarkerSlot: () => DeltaMarkerSlotReservation;
+  cancelMarker: (reservation: DeltaMarkerSlotReservation) => void;
   setMarker: (reservation: DeltaMarkerSlotReservation, marker: DeltaMarker) => void;
 };
 
@@ -32,6 +33,7 @@ function useDeltaMarkerState({ resetKey }: UseDeltaMarkerStateProps): UseDeltaMa
   const [markerB, setMarkerB] = useState<DeltaMarker | undefined>(undefined);
   const generationRef = useRef(0);
   const nextReservationTokenRef = useRef(0);
+  const lastMarkerBTokenRef = useRef<number>();
   const pendingReservationsRef = useRef(
     new Map<DeltaMarkerSlotReservation["slot"], DeltaMarkerSlotReservation>(),
   );
@@ -66,11 +68,12 @@ function useDeltaMarkerState({ resetKey }: UseDeltaMarkerStateProps): UseDeltaMa
   const nextMarkerSlot = useCallback((): DeltaMarkerSlotReservation => {
     const pendingReservations = pendingReservationsRef.current;
     const aReserved = markerA != undefined || pendingReservations.has("a");
-    const bReserved = markerB != undefined || pendingReservations.has("b");
+    // A pending A starts a new pair, but the old B remains visible until the lookup succeeds.
+    const bReserved =
+      pendingReservations.has("b") || (markerB != undefined && !pendingReservations.has("a"));
     const slot: "a" | "b" = !aReserved || bReserved ? "a" : "b";
     if (slot === "a") {
       pendingReservations.delete("b");
-      setMarkerB(undefined);
     }
     const reservation = {
       slot,
@@ -80,6 +83,13 @@ function useDeltaMarkerState({ resetKey }: UseDeltaMarkerStateProps): UseDeltaMa
     pendingReservations.set(slot, reservation);
     return reservation;
   }, [markerA, markerB]);
+
+  const cancelMarker = useCallback((reservation: DeltaMarkerSlotReservation) => {
+    const pending = pendingReservationsRef.current.get(reservation.slot);
+    if (pending?.token === reservation.token && pending.generation === reservation.generation) {
+      pendingReservationsRef.current.delete(reservation.slot);
+    }
+  }, []);
 
   const setMarker = useCallback((reservation: DeltaMarkerSlotReservation, marker: DeltaMarker) => {
     const currentReservation = pendingReservationsRef.current.get(reservation.slot);
@@ -93,7 +103,14 @@ function useDeltaMarkerState({ resetKey }: UseDeltaMarkerStateProps): UseDeltaMa
     pendingReservationsRef.current.delete(reservation.slot);
     if (reservation.slot === "a") {
       setMarkerA(marker);
+      if (
+        lastMarkerBTokenRef.current == undefined ||
+        lastMarkerBTokenRef.current < reservation.token
+      ) {
+        setMarkerB(undefined);
+      }
     } else {
+      lastMarkerBTokenRef.current = reservation.token;
       setMarkerB(marker);
     }
   }, []);
@@ -106,6 +123,7 @@ function useDeltaMarkerState({ resetKey }: UseDeltaMarkerStateProps): UseDeltaMa
     removeMarkerA,
     removeMarkerB,
     nextMarkerSlot,
+    cancelMarker,
     setMarker,
   };
 }

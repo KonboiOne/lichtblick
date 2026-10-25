@@ -59,29 +59,36 @@ function useDeltaMeasureMode({
     removeMarkerA,
     removeMarkerB,
     nextMarkerSlot,
+    cancelMarker,
     setMarker,
   } = useDeltaMarkerState({ resetKey });
 
   const setMarkerAtCanvasPosition = useCallback(
     async (canvasX: number, canvasY: number, xValue: number) => {
+      if (!isMounted()) {
+        return;
+      }
+      const reservation = nextMarkerSlot();
       try {
+        const elements = (await renderer?.getElementsAtPixel({ x: canvasX, y: canvasY })) ?? [];
+
         if (!isMounted()) {
           return;
         }
-        const elements = (await renderer?.getElementsAtPixel({ x: canvasX, y: canvasY })) ?? [];
-
         const seriesValues = resolveSeriesValues(elements);
         if (seriesValues.length === 0) {
           return;
         }
 
         const snappedX = typeof elements[0]?.data.x === "number" ? elements[0].data.x : xValue;
-        setMarker(nextMarkerSlot(), { xValue: snappedX, seriesValues });
+        setMarker(reservation, { xValue: snappedX, seriesValues });
       } catch (err: unknown) {
         console.error(err);
+      } finally {
+        cancelMarker(reservation);
       }
     },
-    [isMounted, nextMarkerSlot, renderer, setMarker],
+    [cancelMarker, isMounted, nextMarkerSlot, renderer, setMarker],
   );
 
   const handleCanvasClick = useCallback(

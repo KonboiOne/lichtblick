@@ -124,6 +124,27 @@ describe("AppMenu", () => {
     expect(logEvent).toHaveBeenCalledWith(AppEvent.APP_MENU_CLICK, { id: "menu-item-open" });
   });
 
+  it.each([
+    ["file", "Recent Source 1", "menu-item-recent-source"],
+    ["view", "showLeftSidebar", "menu-item-left-sidebar"],
+    ["view", "hideRightSidebar", "menu-item-right-sidebar"],
+    ["view", "importLayoutFromFile", "menu-item-import-layout"],
+    ["view", "exportLayoutToFile", "menu-item-export-layout"],
+    ["help", "about", "menu-item-about"],
+    ["help", "documentation", "menu-item-docs"],
+    ["help", "exploreSampleData", "menu-item-demo"],
+  ])("logs the static identifier for %s / %s", async (menu, label, id) => {
+    const open = jest.spyOn(window, "open").mockImplementation(() => null);
+    renderAppMenu();
+
+    fireEvent.pointerEnter(screen.getByText(menu));
+    fireEvent.click(screen.getByText(label));
+    await Promise.resolve();
+
+    expect(logEvent).toHaveBeenCalledWith(AppEvent.APP_MENU_CLICK, { id });
+    open.mockRestore();
+  });
+
   it("handles View menu actions", () => {
     renderAppMenu();
 
