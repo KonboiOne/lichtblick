@@ -81,7 +81,7 @@ describe("FetchReader", () => {
       const reader = new FetchReader(provider, options);
       const queuedFn = mockGlobalRequestQueue.run.mock.calls[0]![0];
 
-      expect((await queuedFn()).status).toBe(206);
+      expect(await queuedFn()).toMatchObject({ status: 206 });
       expect(provider.refresh).toHaveBeenCalledTimes(1);
       expect(mockFetch).toHaveBeenNthCalledWith(1, expect.stringContaining("sig=old"), {
         ...options,
