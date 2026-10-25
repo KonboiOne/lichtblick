@@ -25,6 +25,7 @@ jest.mock("@lichtblick/suite-base", () => {
     FoxgloveWebSocketDataSourceFactory: Stub,
     McapLocalDataSourceFactory: Stub,
     RemoteDataSourceFactory: Stub,
+    RecordsIngestorDataSourceFactory: Stub,
     Ros1LocalBagDataSourceFactory: Stub,
     Ros2LocalBagDataSourceFactory: Stub,
     RosbridgeDataSourceFactory: Stub,
