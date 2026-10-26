@@ -28,7 +28,7 @@ jobs:
       YARN_ENABLE_SCRIPTS: false
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           # Using a Personal Access Token here is required to trigger workflows on our new commit.
           # The default GitHub token doesn't trigger any workflows.
@@ -36,7 +36,7 @@ jobs:
           token: ${{ secrets.LICHTBLICK_GITHUB_TOKEN }}
           ref: ${{ github.event.pull_request.head.ref }}
 
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 24
 
@@ -58,7 +58,7 @@ jobs:
           git commit -m '[dependabot skip] Fix yarn.lock' --allow-empty
           git push
 
-      - uses: octokit/request-action@v3.0.0
+      - uses: octokit/request-action@b91aabaa861c777dcdb14e2387e30eddf04619ae # v3.0.0
         if: contains(fromJSON('["opened", "reopened"]'), github.event.action)
         env:
           GITHUB_TOKEN: ${{ secrets.LICHTBLICK_GITHUB_TOKEN }}
@@ -68,7 +68,7 @@ jobs:
           pull_number: ${{ github.event.pull_request.number }}
           event: "APPROVE"
 
-      - uses: octokit/request-action@v3.0.0
+      - uses: octokit/request-action@b91aabaa861c777dcdb14e2387e30eddf04619ae # v3.0.0
         if: contains(fromJSON('["opened", "reopened"]'), github.event.action)
         env:
           GITHUB_TOKEN: ${{ secrets.LICHTBLICK_GITHUB_TOKEN }}

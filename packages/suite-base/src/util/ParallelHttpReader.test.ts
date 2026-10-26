@@ -161,4 +161,26 @@ describe("ParallelHttpReader", () => {
     }
     fetchMock.mockRestore();
   });
+
+  it.each([403, 412])("fails without emitting bytes after status %s", async (status) => {
+    const urls = access();
+    const fetchMock = jest
+      .spyOn(global, "fetch")
+      .mockImplementation(async () => new Response(null, { status }));
+    const reader = new ParallelHttpReader(urls, 10, 2, { size: 100, etag: '"version-1"' });
+    const data = jest.fn();
+    reader.on("data", data);
+    const done = finished(reader);
+
+    reader.read();
+
+    await expect(done).rejects.toThrow(`Invalid parallel range response (status ${status})`);
+    expect(data).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledTimes(status === 403 ? 2 : 1);
+    expect(urls.refresh).toHaveBeenCalledTimes(status === 403 ? 1 : 0);
+    for (const [, options] of fetchMock.mock.calls) {
+      expect(new Headers(options?.headers).get("if-match")).toBe('"version-1"');
+    }
+    fetchMock.mockRestore();
+  });
 });

@@ -669,6 +669,127 @@ describe("IterablePlayer", () => {
     await player.isClosed;
   });
 
+  it("honors startPlayback() while source metadata is still loading", async () => {
+    const source = new TestSource();
+    const initialize = source.initialize.bind(source);
+    const releaseInitialization = signal();
+    jest.spyOn(source, "initialize").mockImplementation(async () => {
+      await releaseInitialization;
+      return await initialize();
+    });
+    const player = new IterablePlayer({ source, enablePreload: false, sourceId: "test" });
+    const reachedEnd = signal();
+    player.setListener(async (state) => {
+      if (state.activeData && _.isEqual(state.activeData.currentTime, state.activeData.endTime)) {
+        reachedEnd.resolve();
+      }
+    });
+
+    player.startPlayback();
+    releaseInitialization.resolve();
+
+    try {
+      const result = await Promise.race([
+        reachedEnd.then(() => "reachedEnd"),
+        new Promise((resolve) => {
+          setTimeout(() => {
+            resolve("timedOut");
+          }, 1000);
+        }),
+      ]);
+      expect(result).toBe("reachedEnd");
+    } finally {
+      player.close();
+      await player.isClosed;
+    }
+  });
+
+  it("cancels a pending Play request before source metadata arrives", async () => {
+    const source = new TestSource();
+    const initialize = source.initialize.bind(source);
+    const releaseInitialization = signal();
+    jest.spyOn(source, "initialize").mockImplementation(async () => {
+      await releaseInitialization;
+      return await initialize();
+    });
+    const player = new IterablePlayer({ source, enablePreload: false, sourceId: "test" });
+    const idle = signal();
+    let observedPlaying = false;
+    player.setListener(async (state) => {
+      observedPlaying ||= state.activeData?.isPlaying === true;
+      if (
+        state.activeData &&
+        !state.activeData.isPlaying &&
+        state.activeData.currentTime.nsec > 0
+      ) {
+        idle.resolve();
+      }
+    });
+
+    player.startPlayback();
+    player.pausePlayback();
+    releaseInitialization.resolve();
+
+    try {
+      const result = await Promise.race([
+        idle.then(() => "idle"),
+        new Promise((resolve) => {
+          setTimeout(() => {
+            resolve("timedOut");
+          }, 1000);
+        }),
+      ]);
+      expect(result).toBe("idle");
+      expect(observedPlaying).toBe(false);
+    } finally {
+      player.close();
+      await player.isClosed;
+    }
+  });
+
+  it("honors startPlayback() called before the initial start-play finishes", async () => {
+    // Regression test: calling startPlayback() as soon as presence turns PRESENT (which can
+    // happen while the player is still in "initialize"/"start-play", before it ever reaches
+    // "idle" for the first time) must not be silently dropped once start-play completes.
+
+    const source = new TestSource();
+    const player = new IterablePlayer({
+      source,
+      enablePreload: false,
+      sourceId: "test",
+    });
+
+    let didStartEarly = false;
+    const reachedEnd = signal();
+    player.setListener(async (state) => {
+      if (!didStartEarly && state.presence === PlayerPresence.PRESENT && state.activeData) {
+        didStartEarly = true;
+        // Fires while the player is still mid-"initialize", well before "start-play" completes.
+        player.startPlayback();
+        return;
+      }
+
+      if (state.activeData && _.isEqual(state.activeData.currentTime, state.activeData.endTime)) {
+        reachedEnd.resolve();
+      }
+    });
+
+    const timedOut = Symbol("timedOut");
+    const result = await Promise.race([
+      reachedEnd.then(() => "reachedEnd"),
+      new Promise((resolve) => {
+        setTimeout(() => {
+          resolve(timedOut);
+        }, 1000);
+      }),
+    ]);
+
+    expect(result).toBe("reachedEnd");
+
+    player.close();
+    await player.isClosed;
+  });
+
   it("pausePlayback emits when seek-backfill state is active", async () => {
     const source = new TestSource();
     const topic = BasicBuilder.string();

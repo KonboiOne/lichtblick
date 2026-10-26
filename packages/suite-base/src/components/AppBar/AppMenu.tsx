@@ -18,7 +18,9 @@ import {
   useWorkspaceStore,
 } from "@lichtblick/suite-base/context/Workspace/WorkspaceContext";
 import { useWorkspaceActions } from "@lichtblick/suite-base/context/Workspace/useWorkspaceActions";
+import { useInteractionCapture } from "@lichtblick/suite-base/hooks/useInteractionCapture";
 import { useLayoutTransfer } from "@lichtblick/suite-base/hooks/useLayoutTransfer";
+import { AppEvent } from "@lichtblick/suite-base/services/IAnalytics";
 import { formatKeyboardShortcut } from "@lichtblick/suite-base/util/formatKeyboardShortcut";
 
 import { NestedMenuItem } from "./NestedMenuItem";
@@ -33,6 +35,7 @@ export function AppMenu(props: AppMenuProps): React.JSX.Element {
   const { t } = useTranslation("appBar");
 
   const [nestedMenu, setNestedMenu] = useState<string | undefined>();
+  const captureMenuClick = useInteractionCapture(AppEvent.APP_MENU_CLICK);
 
   const { recentSources, selectRecent } = usePlayerSelection();
 
@@ -111,6 +114,7 @@ export function AppMenu(props: AppMenuProps): React.JSX.Element {
       items.push({
         type: "item",
         key: recent.id,
+        dataTestId: "menu-item-recent-source",
         onClick: () => {
           selectRecent(recent.id);
           handleNestedMenuClose();
@@ -138,6 +142,7 @@ export function AppMenu(props: AppMenuProps): React.JSX.Element {
         type: "item",
         label: leftSidebarOpen ? t("hideLeftSidebar") : t("showLeftSidebar"),
         key: "left-sidebar",
+        dataTestId: "menu-item-left-sidebar",
         shortcut: "[",
         onClick: () => {
           sidebarActions.left.setOpen(!leftSidebarOpen);
@@ -148,6 +153,7 @@ export function AppMenu(props: AppMenuProps): React.JSX.Element {
         type: "item",
         label: rightSidebarOpen ? t("hideRightSidebar") : t("showRightSidebar"),
         key: "right-sidebar",
+        dataTestId: "menu-item-right-sidebar",
         shortcut: "]",
         onClick: () => {
           sidebarActions.right.setOpen(!rightSidebarOpen);
@@ -161,6 +167,7 @@ export function AppMenu(props: AppMenuProps): React.JSX.Element {
         type: "item",
         label: t("importLayoutFromFile"),
         key: "import-layout",
+        dataTestId: "menu-item-import-layout",
         onClick: () => {
           runLayoutAction(importLayout);
         },
@@ -169,6 +176,7 @@ export function AppMenu(props: AppMenuProps): React.JSX.Element {
         type: "item",
         label: t("exportLayoutToFile"),
         key: "export-layout",
+        dataTestId: "menu-item-export-layout",
         onClick: () => {
           runLayoutAction(exportLayout);
         },
@@ -206,11 +214,29 @@ export function AppMenu(props: AppMenuProps): React.JSX.Element {
 
   const helpItems = useMemo<AppBarMenuItem[]>(
     () => [
-      { type: "item", key: "about", label: t("about"), onClick: onAboutClick },
+      {
+        type: "item",
+        key: "about",
+        dataTestId: "menu-item-about",
+        label: t("about"),
+        onClick: onAboutClick,
+      },
       { type: "divider" },
-      { type: "item", key: "docs", label: t("documentation"), onClick: onDocsClick },
+      {
+        type: "item",
+        key: "docs",
+        dataTestId: "menu-item-docs",
+        label: t("documentation"),
+        onClick: onDocsClick,
+      },
       { type: "divider" },
-      { type: "item", key: "demo", label: t("exploreSampleData"), onClick: onDemoClick },
+      {
+        type: "item",
+        key: "demo",
+        dataTestId: "menu-item-demo",
+        label: t("exploreSampleData"),
+        onClick: onDemoClick,
+      },
     ],
     [onAboutClick, onDemoClick, onDocsClick, t],
   );
@@ -223,6 +249,7 @@ export function AppMenu(props: AppMenuProps): React.JSX.Element {
         anchorPosition={anchorPosition}
         disablePortal={disablePortal}
         id="app-menu"
+        onClickCapture={captureMenuClick}
         open={open}
         disableAutoFocusItem
         onClose={handleNestedMenuClose}

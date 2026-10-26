@@ -124,12 +124,14 @@ it("rejects a mismatched Content-Range on a small Records Ingestor read", async 
   const endpoint = "https://records.example.test/api/v1/records/sha256-a/visualization-access";
   const payload = "https://store.blob.core.windows.net/records/payload.mcap?sp=r&sig=secret";
   const fetchMock = jest.spyOn(global, "fetch").mockImplementation(async (url, options) => {
-    if (url === endpoint)
-      {return new Response(
+    if (url === endpoint) {
+      return new Response(
         JSON.stringify({ url: payload, expiresAt: new Date(Date.now() + 300_000).toISOString() }),
-      );}
-    if (options?.method === "HEAD")
-      {return new Response(null, { headers: { "accept-ranges": "bytes", "content-length": "100" } });}
+      );
+    }
+    if (options?.method === "HEAD") {
+      return new Response(null, { headers: { "accept-ranges": "bytes", "content-length": "100" } });
+    }
     return new Response(new Uint8Array([1, 2]), {
       status: 206,
       headers: { "content-range": "bytes 0-1/100" },

@@ -287,11 +287,16 @@ export class IterablePlayer implements Player {
   }
 
   #startPlayImpl(opt?: { untilTime: Time }): void {
-    if (this.#isPlaying || this.#untilTime != undefined || !this.#start || !this.#end) {
+    if (this.#isPlaying || this.#untilTime != undefined) {
       return;
     }
 
+    // Play can wait for source metadata; playUntil needs bounds to validate its target.
     if (opt?.untilTime) {
+      if (!this.#start || !this.#end) {
+        return;
+      }
+
       if (this.#currentTime && compare(opt.untilTime, this.#currentTime) <= 0) {
         throw new Error("Invariant: playUntil time must be after the current time");
       }
@@ -852,7 +857,9 @@ export class IterablePlayer implements Player {
     this.#messages = messageEvents;
     this.#presence = PlayerPresence.PRESENT;
     this.#queueEmitState();
-    this.#setState("idle");
+    // `startPlayback()` may have been called while still in "initialize"/"start-play" setting `#isPlaying` before we ever reach "idle". Honor it
+    // here instead of always going idle
+    this.#setState(this.#isPlaying ? "play" : "idle");
   }
 
   // Process a seek request. The seek is performed by requesting a getBackfillMessages from the source.
