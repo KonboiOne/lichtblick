@@ -20,6 +20,7 @@ export type McapSource =
       cacheSizeInBytes?: number;
       readAheadEnabled?: boolean;
       readAheadBufferBytes?: number;
+      maxConcurrentConnections?: number;
       pool?: HydratedSourcePool;
     };
 
