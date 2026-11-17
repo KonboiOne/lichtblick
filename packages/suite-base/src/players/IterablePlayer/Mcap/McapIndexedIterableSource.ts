@@ -167,10 +167,14 @@ export class McapIndexedIterableSource implements ISerializedIterableSource {
       return;
     }
 
-    const topicNames = Array.from(topics.keys());
-
     const startTime = toNanoSec(start);
     const endTime = toNanoSec(end);
+    // @mcap/core >= 2.4 throws when start is more than 1ns after end.
+    if (startTime > endTime + 1n) {
+      return;
+    }
+
+    const topicNames = Array.from(topics.keys());
     const stopPrefetch = this.#prefetch?.(
       this.#reader.chunkIndexes
         .filter(

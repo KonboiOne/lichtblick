@@ -16,13 +16,17 @@ import { BatchingReadable } from "./BatchingReadable";
 import type { RemoteFileReadableOptions } from "./RemoteFileReadable.types";
 
 const DEFAULT_CACHE_SIZE_BYTES = 1024 * 1024 * 500; // 500MiB
+// Enough for the MCAP header; keeps speculative chunk data from competing with summary downloads.
+const STARTUP_READ_AHEAD_BUFFER_BYTES = 64 * 1024;
 
 export class RemoteFileReadable {
   readonly #remoteReader: CachedFilelike | PrefetchingFilelike;
   readonly #batchingReadable: BatchingReadable;
+  readonly #readAheadBufferBytes: number | undefined;
 
   public constructor(url: string, options?: RemoteFileReadableOptions) {
     const fileReader = new BrowserHttpReader(url, options);
+    this.#readAheadBufferBytes = options?.readAheadBufferBytes;
     this.#remoteReader =
       options?.refreshAccess === true
         ? new PrefetchingFilelike({ fileReader })
@@ -31,6 +35,7 @@ export class RemoteFileReadable {
             cacheSizeInBytes: options?.cacheSizeInBytes ?? DEFAULT_CACHE_SIZE_BYTES,
             readAheadEnabled: options?.readAheadEnabled,
             readAheadBufferBytes: options?.readAheadBufferBytes,
+            maxConcurrentConnections: options?.maxConcurrentConnections,
           });
 
     const inner: McapTypes.IReadable = {
@@ -64,5 +69,26 @@ export class RemoteFileReadable {
 
   public close(): void {
     this.#remoteReader.close();
+  }
+
+  public limitReadAheadForStartup(): void {
+    // Indexed prefetch already bounds renewable sources without sequential read-ahead.
+    if (this.#remoteReader instanceof PrefetchingFilelike) {
+      return;
+    }
+
+    this.#remoteReader.setReadAheadBufferBytes(
+      Math.min(STARTUP_READ_AHEAD_BUFFER_BYTES, this.#readAheadBufferBytes ?? Infinity),
+    );
+    this.#remoteReader.pauseIdleReadAhead();
+  }
+
+  public restoreReadAhead(): void {
+    if (this.#remoteReader instanceof PrefetchingFilelike) {
+      return;
+    }
+
+    this.#remoteReader.setReadAheadBufferBytes(this.#readAheadBufferBytes);
+    this.#remoteReader.resumeIdleReadAhead();
   }
 }

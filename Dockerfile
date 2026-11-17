@@ -14,7 +14,7 @@ FROM ${BASE_IMAGE_REGISTRY}/library/caddy:2.10.2-alpine
 ARG SOURCE_REVISION
 LABEL org.opencontainers.image.source="https://github.com/KonboiOne/lichtblick" \
       org.opencontainers.image.revision="${SOURCE_REVISION}" \
-      org.opencontainers.image.version="1.30.0"
+      org.opencontainers.image.version="1.31.0"
 
 RUN cp /usr/bin/caddy /usr/local/bin/caddy
 WORKDIR /src
